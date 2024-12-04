@@ -34,7 +34,6 @@ public:
 class MockAttentionParamQuery {
 public:
     void set_param_value(const std::string& param, const std::string& value) {
-        // Simulate setting parameters
     }
 };
 
@@ -44,80 +43,51 @@ public:
     CogServer cs;
     AFImportanceDiffusionAgent* agent;
 
-    // Setup method to initialize test environment
     void setUp() {
         mockParamQuery = new MockAttentionParamQuery();
         agent = new AFImportanceDiffusionAgent(cs);
-
-        // Setting up mock parameters for AttentionParamQuery
         mockParamQuery->set_param_value(AttentionParamQuery::dif_spread_percentage, "0.5");
         mockParamQuery->set_param_value(AttentionParamQuery::heb_max_alloc_percentage, "0.8");
         mockParamQuery->set_param_value(AttentionParamQuery::dif_spread_hebonly, "1");
-
-        // Injecting the mock AttentionParamQuery into the agent
         agent->_atq = mockParamQuery;
     }
 
-    // Teardown method to clean up resources
     void tearDown() {
         delete mockParamQuery;
         delete agent;
     }
 
-    // Test initialization of the AFImportanceDiffusionAgent
     void testInitialization() {
         TS_ASSERT_EQUALS(agent->classinfo().name(), "opencog::AFImportanceDiffusionAgent");
     }
 
-    // Test calculation of diffusion amount
     void testCalculateDiffusionAmount() {
-        MockHandle h;  // Use a mock Handle to represent an atom
-        h.set_sti(10); // Set mock STI value
-
-        // Check if the diffusion amount is calculated correctly based on mock STI
-        TS_ASSERT_EQUALS(agent->calculateDiffusionAmount(h), 5); // 0.5 * 10 STI
+        MockHandle h;
+        h.set_sti(10);
+        TS_ASSERT_EQUALS(agent->calculateDiffusionAmount(h), 5);
     }
 
-    // Test importance spreading process
     void testSpreadImportance() {
-        // Mock diffusion source vector and spread importance
         HandleSeq diffusionSourceVector = agent->diffusionSourceVector();
-
-        // Ensure the vector is populated
         TS_ASSERT(diffusionSourceVector.size() > 0);
-
-        // Simulate spreading importance
         agent->spreadImportance();
-
-        // Example expected value
-        double expected_value = 5; // Replace this with the correct expected value
-
-        // Check that STI values have been updated (assuming there is a way to check this)
+        double expected_value = 5;
         TS_ASSERT_EQUALS(diffusionSourceVector[0].get_sti(), expected_value);
     }
 
-    // Test various edge cases for robustness
     void testEdgeCases() {
-        // Case 1: No connected nodes (empty diffusionSourceVector)
         HandleSeq emptyDiffusionSourceVector;
-        agent->setDiffusionSourceVector(emptyDiffusionSourceVector); // Use a setter if available
-
-        // Expect some exception or behavior when no nodes are present
+        agent->setDiffusionSourceVector(emptyDiffusionSourceVector);
         TS_ASSERT_THROWS_ANYTHING(agent->spreadImportance());
-
-        // Case 2: STI = 0 (no diffusion should happen)
         MockHandle h;
         h.set_sti(0);
         TS_ASSERT_EQUALS(agent->calculateDiffusionAmount(h), 0);
-
-        // Case 3: STI = negative (if applicable)
         MockHandle hNegative;
         hNegative.set_sti(-5);
         TS_ASSERT(agent->calculateDiffusionAmount(hNegative) < 0);
     }
 };
 
-// Manual runner for the tests
 int main() {
     AFImportanceDiffusionUnitTest suite;
 
