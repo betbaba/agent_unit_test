@@ -1,0 +1,166 @@
+#include <gtest/gtest.h>
+#include <opencog/atomspace/AtomSpace.h>
+#include <opencog/attention/ForgettingAgent.h>
+#include <opencog/atomspace/Atom.h>
+
+namespace opencog {
+
+// Mocking necessary classes for testing
+class MockCogServer : public CogServer {
+public:
+    // Implement necessary methods for the test
+    AtomSpace* create_atom_space() override {
+        return new AtomSpace();
+    }
+};
+
+class ForgettingAgentTest : public ::testing::Test {
+protected:
+    MockCogServer mockServer;
+    ForgettingAgent* agent;
+    AtomSpace* atomSpace;
+
+    // Set up test data
+    void SetUp() override {
+        atomSpace = mockServer.create_atom_space();
+        agent = new ForgettingAgent(mockServer);
+    }
+
+    // Clean up test data
+    void TearDown() override {
+        delete agent;
+        delete atomSpace;
+    }
+};
+
+// Test Initialization
+TEST_F(ForgettingAgentTest, TestInitialization) {
+    EXPECT_EQ(agent->maxSize, 10000);  // Check the default maxSize
+    EXPECT_EQ(agent->accDivSize, 100);  // Check the default accDivSize
+    EXPECT_EQ(agent->forgetThreshold, AttentionValue::MAXLTI);  // Default forgetThreshold should be MAXLTI
+}
+
+// Test Forgetting Process
+TEST_F(ForgettingAgentTest, TestForgettingProcess) {
+    // Create atoms and add them to the atom space
+    Handle atom1 = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom1);
+    Handle atom2 = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom2);
+
+    // Set the LTI values
+    _bank->set_lti(atom1, 1);  // Low LTI
+    _bank->set_lti(atom2, 10); // Higher LTI
+
+    // Simulate the forgetting process
+    agent->forget();
+
+    // Ensure atom1 (with low LTI) is forgotten
+    EXPECT_FALSE(atomSpace->has_atom(atom1));
+    // Ensure atom2 (with high LTI) is not forgotten
+    EXPECT_TRUE(atomSpace->has_atom(atom2));
+}
+
+// Test Edge Case: No atoms to forget
+TEST_F(ForgettingAgentTest, TestNoAtomsToForget) {
+    // Create one atom and check that it isn't removed when it's the only one
+    Handle atom = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom);
+
+    agent->forget();
+
+    EXPECT_TRUE(atomSpace->has_atom(atom));  // The atom should still exist
+}
+
+// Test Edge Case: Forgetting rate is too high
+TEST_F(ForgettingAgentTest, TestHighForgettingRate) {
+    // Set a very low threshold to remove atoms
+    agent->forgetThreshold = 0;
+
+    // Add multiple atoms with various LTI values
+    Handle atom1 = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom1);
+    _bank->set_lti(atom1, 1);
+
+    Handle atom2 = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom2);
+    _bank->set_lti(atom2, 10);
+
+    // Simulate the forgetting process with high forgetting rate
+    agent->forget();
+
+    // Verify that the less important atom is forgotten
+    EXPECT_FALSE(atomSpace->has_atom(atom1));  // The atom with LTI 1 should be forgotten
+    EXPECT_TRUE(atomSpace->has_atom(atom2));   // The atom with LTI 10 should remain
+}
+
+// Test Edge Case: Forgetting rate is very low
+TEST_F(ForgettingAgentTest, TestLowForgettingRate) {
+    // Set a very high threshold to prevent atoms from being forgotten
+    agent->forgetThreshold = AttentionValue::MAXLTI;
+
+    // Create atoms and add them to the atom space
+    Handle atom1 = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom1);
+    _bank->set_lti(atom1, 1);
+
+    Handle atom2 = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom2);
+    _bank->set_lti(atom2, 10);
+
+    // Simulate the forgetting process with low forgetting rate
+    agent->forget();
+
+    // Verify that no atoms are forgotten because the forget threshold is too high
+    EXPECT_TRUE(atomSpace->has_atom(atom1));
+    EXPECT_TRUE(atomSpace->has_atom(atom2));
+}
+
+// Test Edge Case: Forgetting too many atoms
+TEST_F(ForgettingAgentTest, TestTooManyAtomsToForget) {
+    // Set maxSize to a small number and simulate an atom space overflow
+    agent->maxSize = 3;
+
+    // Add atoms to exceed max size
+    for (int i = 0; i < 10; ++i) {
+        Handle atom = atomSpace->create_atom<Atom>();
+        atomSpace->add_atom(atom);
+        _bank->set_lti(atom, i);  // Varying LTI values
+    }
+
+    // Simulate forgetting
+    agent->forget();
+
+    // Check if the atom space size is within the expected limit
+    EXPECT_LE(atomSpace->size(), agent->maxSize);
+}
+
+// Test Forgetting Threshold
+TEST_F(ForgettingAgentTest, TestForgettingThreshold) {
+    // Set a specific threshold for forgetting
+    agent->forgetThreshold = 5;
+
+    // Add atoms with LTI values above and below the threshold
+    Handle atom1 = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom1);
+    _bank->set_lti(atom1, 3);  // Below threshold
+
+    Handle atom2 = atomSpace->create_atom<Atom>();
+    atomSpace->add_atom(atom2);
+    _bank->set_lti(atom2, 6);  // Above threshold
+
+    // Simulate forgetting
+    agent->forget();
+
+    // Verify that the atom with LTI below the threshold is forgotten
+    EXPECT_FALSE(atomSpace->has_atom(atom1));
+    EXPECT_TRUE(atomSpace->has_atom(atom2));  // The atom with higher LTI should remain
+}
+
+}  // namespace opencog
+
+// Main function to run tests
+int main(int argc, char **argv) {
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

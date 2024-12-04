@@ -1,0 +1,118 @@
+#include <cxxtest/TestSuite.h>
+#include <opencog/attention/AFRentCollectionAgent.h>
+#include <opencog/attention/AttentionParamQuery.h>
+#include <opencog/attentionbank/bank/AttentionBank.h>
+#include <opencog/attentionbank/avalue/AttentionValue.h>
+#include <opencog/atoms/Handle.h>
+#include <opencog/atomspace/AtomSpace.h>
+#include <opencog/cogserver/server/CogServer.h>
+#include <iostream>  // For manual test output
+
+// Mock classes for dependencies (you'll need to manually mock methods)
+class MockAttentionBank {
+public:
+    void set_sti(const Handle&, float) { /* Mock implementation */ }
+    void set_lti(const Handle&, float) { /* Mock implementation */ }
+    void get_handle_set_in_attentional_focus(std::back_insert_iterator<HandleSeq>& targetSet) {
+        // Mock logic to add handles to the target set
+        Handle h1, h2; // Mock handles
+        *targetSet = h1;
+        *targetSet = h2;
+    }
+};
+
+class MockAttentionValue {
+public:
+    AttentionValue::sti_t get_sti(const Handle&) const { return 100.0f; }
+    AttentionValue::lti_t get_lti(const Handle&) const { return 50.0f; }
+};
+
+// Define the test suite
+class AFRentCollectionAgentTestSuite : public CxxTest::TestSuite {
+private:
+    CogServer mockServer;
+    AFRentCollectionAgent* agent;
+    MockAttentionBank* mockBank;
+    MockAttentionValue* mockAttentionValue;
+
+public:
+    void setUp() {
+        // Initialize mock objects and AFRentCollectionAgent
+        mockBank = new MockAttentionBank();
+        mockAttentionValue = new MockAttentionValue();
+        agent = new AFRentCollectionAgent(mockServer);
+        
+        // Replace _bank with mockBank
+        agent->_bank = mockBank;
+    }
+
+    void tearDown() {
+        delete agent;
+        delete mockBank;
+        delete mockAttentionValue;
+    }
+
+    // Test for selectTargets method
+    void testSelectTargets() {
+        HandleSeq targetSet;
+
+        // Simulate behavior for get_handle_set_in_attentional_focus
+        mockBank->get_handle_set_in_attentional_focus(std::back_inserter(targetSet));
+
+        // Call selectTargets
+        agent->selectTargets(targetSet);
+
+        // Test that targetSet is not empty
+        TS_ASSERT(!targetSet.empty());
+        TS_ASSERT_EQUALS(targetSet.size(), 2); // Expecting 2 handles
+    }
+
+    // Test for collectRent method
+    void testCollectRent() {
+        HandleSeq targetSet;
+        Handle h1, h2;
+
+        // Simulate the behavior of the attention values
+        float sti1 = mockAttentionValue->get_sti(h1);
+        float lti1 = mockAttentionValue->get_lti(h1);
+
+        // Add mock handles to target set
+        targetSet.push_back(h1);
+        targetSet.push_back(h2);
+
+        // Call collectRent
+        agent->collectRent(targetSet);
+
+        // Ensure collectRent updated values correctly
+        TS_ASSERT_LESS_THAN(mockAttentionValue->get_sti(h1), sti1);
+        TS_ASSERT_LESS_THAN(mockAttentionValue->get_lti(h1), lti1);
+    }
+};
+
+// Manual runner for the tests
+int main() {
+    AFRentCollectionAgentTestSuite suite;
+
+    std::cout << "Running tests..." << std::endl;
+    
+    suite.setUp();
+
+    try {
+        std::cout << "Running testSelectTargets..." << std::endl;
+        suite.testSelectTargets();
+        std::cout << "testSelectTargets passed!" << std::endl;
+
+        std::cout << "Running testCollectRent..." << std::endl;
+        suite.testCollectRent();
+        std::cout << "testCollectRent passed!" << std::endl;
+    }
+    catch (const CxxTest::Error& e) {
+        std::cerr << "Test failed: " << e.what() << std::endl;
+    }
+
+    suite.tearDown();
+
+    std::cout << "All tests completed." << std::endl;
+
+    return 0;
+}

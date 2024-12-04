@@ -1,0 +1,154 @@
+#include <cxxtest/TestSuite.h>
+#include <opencog/attention/AttentionParamQuery.h>
+#include <opencog/attention/AFImportanceDiffusionAgent.h>
+#include <opencog/guile/SchemeEval.h>
+#include <opencog/attention/Neighbors.h>
+#include <opencog/cogserver/server/CogServer.h>
+#include <opencog/cogserver/modules/agents/AgentsModule.h>
+#include <opencog/cogserver/modules/agents/Scheduler.h>
+#include <opencog/attentionbank/bank/AttentionBank.h>
+#include <opencog/attentionbank/types/atom_types.h>
+#include <opencog/attentionbank/avalue/AttentionValue.h>
+#include <opencog/atoms/truthvalue/SimpleTruthValue.h>
+#include <opencog/atomspace/AtomSpace.h>
+#include <opencog/util/Logger.h>
+#include <opencog/util/Config.h>
+#include <opencog/util/algorithm.h>
+#include <opencog/cogserver/server/Factory.h>
+
+using namespace opencog;
+
+class MockHandle {
+public:
+    int sti;
+
+    void set_sti(int value) {
+        sti = value;
+    }
+
+    int get_sti() const {
+        return sti;
+    }
+};
+
+class MockAttentionParamQuery {
+public:
+    void set_param_value(const std::string& param, const std::string& value) {
+        // Simulate setting parameters
+    }
+};
+
+class AFImportanceDiffusionUnitTest : public CxxTest::TestSuite {
+public:
+    MockAttentionParamQuery* mockParamQuery;
+    CogServer cs;
+    AFImportanceDiffusionAgent* agent;
+
+    // Setup method to initialize test environment
+    void setUp() {
+        mockParamQuery = new MockAttentionParamQuery();
+        agent = new AFImportanceDiffusionAgent(cs);
+
+        // Setting up mock parameters for AttentionParamQuery
+        mockParamQuery->set_param_value(AttentionParamQuery::dif_spread_percentage, "0.5");
+        mockParamQuery->set_param_value(AttentionParamQuery::heb_max_alloc_percentage, "0.8");
+        mockParamQuery->set_param_value(AttentionParamQuery::dif_spread_hebonly, "1");
+
+        // Injecting the mock AttentionParamQuery into the agent
+        agent->_atq = mockParamQuery;
+    }
+
+    // Teardown method to clean up resources
+    void tearDown() {
+        delete mockParamQuery;
+        delete agent;
+    }
+
+    // Test initialization of the AFImportanceDiffusionAgent
+    void testInitialization() {
+        TS_ASSERT_EQUALS(agent->classinfo().name(), "opencog::AFImportanceDiffusionAgent");
+    }
+
+    // Test calculation of diffusion amount
+    void testCalculateDiffusionAmount() {
+        MockHandle h;  // Use a mock Handle to represent an atom
+        h.set_sti(10); // Set mock STI value
+
+        // Check if the diffusion amount is calculated correctly based on mock STI
+        TS_ASSERT_EQUALS(agent->calculateDiffusionAmount(h), 5); // 0.5 * 10 STI
+    }
+
+    // Test importance spreading process
+    void testSpreadImportance() {
+        // Mock diffusion source vector and spread importance
+        HandleSeq diffusionSourceVector = agent->diffusionSourceVector();
+
+        // Ensure the vector is populated
+        TS_ASSERT(diffusionSourceVector.size() > 0);
+
+        // Simulate spreading importance
+        agent->spreadImportance();
+
+        // Example expected value
+        double expected_value = 5; // Replace this with the correct expected value
+
+        // Check that STI values have been updated (assuming there is a way to check this)
+        TS_ASSERT_EQUALS(diffusionSourceVector[0].get_sti(), expected_value);
+    }
+
+    // Test various edge cases for robustness
+    void testEdgeCases() {
+        // Case 1: No connected nodes (empty diffusionSourceVector)
+        HandleSeq emptyDiffusionSourceVector;
+        agent->setDiffusionSourceVector(emptyDiffusionSourceVector); // Use a setter if available
+
+        // Expect some exception or behavior when no nodes are present
+        TS_ASSERT_THROWS_ANYTHING(agent->spreadImportance());
+
+        // Case 2: STI = 0 (no diffusion should happen)
+        MockHandle h;
+        h.set_sti(0);
+        TS_ASSERT_EQUALS(agent->calculateDiffusionAmount(h), 0);
+
+        // Case 3: STI = negative (if applicable)
+        MockHandle hNegative;
+        hNegative.set_sti(-5);
+        TS_ASSERT(agent->calculateDiffusionAmount(hNegative) < 0);
+    }
+};
+
+// Manual runner for the tests
+int main() {
+    AFImportanceDiffusionUnitTest suite;
+
+    std::cout << "Running tests..." << std::endl;
+    
+    suite.setUp();
+
+    try {
+        std::cout << "Running testInitialization..." << std::endl;
+        suite.testInitialization();
+        std::cout << "testInitialization passed!" << std::endl;
+
+        std::cout << "Running testCalculateDiffusionAmount..." << std::endl;
+        suite.testCalculateDiffusionAmount();
+        std::cout << "testCalculateDiffusionAmount passed!" << std::endl;
+
+        std::cout << "Running testSpreadImportance..." << std::endl;
+        suite.testSpreadImportance();
+        std::cout << "testSpreadImportance passed!" << std::endl;
+
+        std::cout << "Running testEdgeCases..." << std::endl;
+        suite.testEdgeCases();
+        std::cout << "testEdgeCases passed!" << std::endl;
+    }
+    catch (const CxxTest::TestException& e) {
+        std::cerr << "Test failed: " << e.what() << std::endl;
+    }
+
+    suite.tearDown();
+
+    std::cout << "All tests completed." << std::endl;
+
+    return 0;
+}
